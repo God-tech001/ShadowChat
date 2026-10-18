@@ -705,7 +705,34 @@ async function openChat(chatId) {
 }
 
 
- // ---------- REALTIME MESSAGE SUBSCRIPTION ----------
+ 
+// ---------- LOAD / RENDER MESSAGES ----------
+async function loadMessages(chatId) {
+  if (!chatId) return;
+
+  const { data, error } = await supabaseClient
+    .from("messages")
+    .select("id, chat_id, sender_id, message, created_at")
+    .eq("chat_id", chatId)
+    .order("created_at", { ascending: true })
+    .limit(500);
+
+  if (error) {
+    toast(error.message);
+    return;
+  }
+
+  // Purane messages load karo.
+  messages = (data || [])
+    .filter(m => m.chat_id === chatId)
+    .map(m => ({ ...m, body: m.message }));
+
+  renderMessages();
+
+  // Aage aane wale messages automatically receive karo.
+  await subscribeToMessages(chatId);
+}
+// ---------- REALTIME MESSAGE SUBSCRIPTION ----------
 async function subscribeToMessages(chatId) {
   if (!chatId || !currentUser) return;
 
@@ -762,33 +789,6 @@ async function subscribeToMessages(chatId) {
     });
 
   messageChannel = channel;
-}
-
-// ---------- LOAD / RENDER MESSAGES ----------
-async function loadMessages(chatId) {
-  if (!chatId) return;
-
-  const { data, error } = await supabaseClient
-    .from("messages")
-    .select("id, chat_id, sender_id, message, created_at")
-    .eq("chat_id", chatId)
-    .order("created_at", { ascending: true })
-    .limit(500);
-
-  if (error) {
-    toast(error.message);
-    return;
-  }
-
-  // Purane messages load karo.
-  messages = (data || [])
-    .filter(m => m.chat_id === chatId)
-    .map(m => ({ ...m, body: m.message }));
-
-  renderMessages();
-
-  // Aage aane wale messages automatically receive karo.
-  await subscribeToMessages(chatId);
 }
 
 // ---------- SEND MESSAGE ----------
