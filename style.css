@@ -22,3 +22,112 @@ label{display:block;font-size:13px;font-weight:600;margin:16px 0 7px}.auth-scree
 .bottom-nav{position:fixed;z-index:5;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:620px;min-height:68px;padding:7px 5px max(7px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--border);display:flex;justify-content:space-around}.nav-btn{flex:1;border:0;background:transparent;color:#78858a;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;font-size:11px;min-height:48px}.nav-btn i{font-size:19px}.nav-btn.active{color:var(--green-light);font-weight:bold}
 dialog{width:calc(100% - 28px);max-width:440px;max-height:85dvh;overflow-y:auto;border:0;border-radius:17px;padding:20px;box-shadow:0 12px 50px #00000030}dialog::backdrop{background:#10201f77}.dialog-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.dialog-top h2{font-size:19px;margin:0}.dialog-top .icon-btn{color:var(--muted)}.dialog-label{display:block;margin:15px 0 7px;font-size:13px}.dialog-help{color:var(--muted);font-size:12px;line-height:1.5}.dialog-submit{margin-top:18px}.result-list{margin-top:12px}.result-row,.member-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)}.result-row>div:nth-child(2),.member-info{flex:1;min-width:0}.result-row strong,.member-info strong{font-size:14px;overflow-wrap:anywhere}.result-row small,.member-info small{display:block;margin-top:4px;color:var(--muted);font-size:12px}.result-row button,.small-btn{border:0;background:#e1f4ed;color:var(--green);padding:9px 11px;border-radius:9px;font-weight:bold;font-size:12px}.small-btn.danger{background:#fff0f0;color:#bd3030}.small-btn:disabled{opacity:.5;cursor:not-allowed}.dialog-actions{display:grid;gap:9px;margin-top:10px}.dialog-actions button{width:100%;text-align:left;border:1px solid var(--border);border-radius:10px;background:#fff;padding:12px;color:var(--text)}.dialog-actions button.danger-option{color:#bd3030;background:#fff8f8}.group-request-card{margin-top:12px;padding:15px;background:#fff;border:1px solid #e5e7eb;border-radius:14px}.group-request-card h3{margin:0 0 8px;overflow-wrap:anywhere}.group-request-card p{margin:0 0 14px;font-size:13px;overflow-wrap:anywhere}.group-request-actions{display:flex;gap:10px}.group-request-actions button{flex:1;min-height:42px;cursor:pointer}.group-requests-section{margin:18px 15px 90px;padding:12px;background:#fff;border:1px solid #e5e7eb;border-radius:16px}.request-count{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 8px;border-radius:50px;background:#075e54;color:#fff;font-size:13px;font-weight:700}.request-heading{padding:10px 0}.toast{position:fixed;z-index:20;bottom:85px;left:50%;transform:translateX(-50%);background:#20322e;color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;width:max-content;max-width:calc(100% - 30px);opacity:0;pointer-events:none;transition:opacity .2s}.toast.show{opacity:1}
 @media(min-width:700px){body{padding:20px 0}.app{min-height:calc(100dvh - 40px);border-radius:16px;overflow:hidden}.bottom-nav{bottom:20px;border-radius:0 0 16px 16px}.message-list{height:calc(100dvh - 270px)}}
+
+/* ===== ShadowChat: Mobile Chat Layout Fix ===== */
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+.app {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topbar {
+  flex-shrink: 0;
+}
+
+/* Main app ki available height */
+#mainScreen:not([hidden]) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Normal pages scroll kar sakein */
+#mainScreen > section:not([hidden]) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Chat screen: header, messages aur input */
+#chatScreen:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-header {
+  flex-shrink: 0;
+}
+
+#messageList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+#messageForm {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  background: #fff;
+  border-top: 1px solid #e5e7eb;
+  position: relative;
+  z-index: 5;
+}
+
+#messageInput {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+  font-size: 16px;
+}
+
+/* Chat khuli ho toh bottom navigation chhupa do */
+.app:has(#chatScreen:not([hidden])) .bottom-nav {
+  display: none;
+}
+
+/* Phone screen adjustments */
+@media (max-width: 600px) {
+  .app {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  #messageForm {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  #messageInput {
+    min-height: 42px;
+  }
+
+  .send-btn {
+    flex-shrink: 0;
+  }
+}
