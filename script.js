@@ -1034,11 +1034,17 @@ function openChatOptions(chatId) {
       await leaveGroup(chat);
     }, true);
   }
-
   addOption("Cancel", async () => {
     $("actionDialog").close();
   });
+
+  const dialog = $("actionDialog");
+
+  if (dialog && !dialog.open) {
+    dialog.showModal();
+  }
 }
+
 
 // ---------- VIEW GROUP MEMBERS ----------
 function showGroupMembers(chat) {
