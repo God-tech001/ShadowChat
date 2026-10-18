@@ -962,6 +962,7 @@ $("chatMenuBtn").addEventListener("click", event => {
   }
 });
 
+
 function openChatOptions(chatId) {
   const chat = chats.find(c => c.id === chatId);
 
@@ -981,14 +982,25 @@ function openChatOptions(chatId) {
     button.style.margin = "6px";
 
     button.addEventListener("click", async () => {
-      await handler();
+      button.disabled = true;
+
+      try {
+        await handler();
+      } catch (error) {
+        console.error(error);
+        alert("Action complete nahi hua: " + error.message);
+      } finally {
+        button.disabled = false;
+      }
     });
 
     body.append(button);
   }
 
+  // Existing hide-chat option
   addOption("Delete / Hide Chat", () => hideChat(chat), true);
 
+  // Personal chat options
   if (chat.type === "direct") {
     const otherId = (chat.members || [])
       .find(id => id !== currentUser.id);
@@ -1000,33 +1012,98 @@ function openChatOptions(chatId) {
         blocked ? "Unblock User" : "Block User",
         async () => {
           $("actionDialog").close();
-          if (blocked) await unblockUser(otherId);
-          else await blockUser(otherId);
+
+          if (blocked) {
+            await unblockUser(otherId);
+          } else {
+            await blockUser(otherId);
+          }
         },
         !blocked
       );
     }
   }
 
+  // Group options
   if (chat.type === "group") {
     const admin = isGroupAdmin(chat);
+    const isCreator = chat.created_by === currentUser.id;
 
     const summary = document.createElement("p");
     summary.className = "dialog-help";
-    summary.textContent = admin
-      ? `You are an admin. Members: ${(chat.members || []).length}`
-      : `Members: ${(chat.members || []).length}`;
+    summary.textContent =
+      `${admin ? "You are an admin. " : ""}Members: ${
+        (chat.members || []).length
+      }`;
 
     body.append(summary);
 
     if (admin) {
       addOption("＋ Add Members", () => openAddMembers(chat));
-
-      addOption("Manage Group Admins", () => openManageGroupAdmins(chat));
-
-      addOption("View Group Members", () => showGroupMembers(chat));
+      addOption("Manage Group Admins", () =>
+        openManageGroupAdmins(chat)
+      );
+      addOption("View Group Members", () =>
+        showGroupMembers(chat)
+      );
     } else {
-      addOption("View Group Admin", () => showGroupAdmins(chat));
+      addOption("View Group Admin", () =>
+        showGroupAdmins(chat)
+      );
+    }
+
+    // Permanent deletion is shown only to the creator
+    if (isCreator) {
+      addOption(
+        "Permanently Delete Group",
+        async () => {
+          const confirmed = confirm(
+            `Are you sure you want to permanently delete "${chat.name}"?\n\n` +
+            "This may permanently remove the group, messages, " +
+            "memberships and related records. This action cannot " +
+            "easily be undone."
+          );
+
+          if (!confirmed) return;
+
+          const { data, error } = await supabaseClient.rpc(
+            "delete_group_permanently",
+            { p_group_id: chat.id }
+          );
+
+          if (error) {
+            alert("Group delete nahi hua: " + error.message);
+            return;
+          }
+
+          if (data !== true) {
+            alert("Group delete confirm nahi hua.");
+            return;
+          }
+
+          $("actionDialog").close();
+
+          // Remove deleted group from local chat list
+          const index = chats.findIndex(c => c.id === chat.id);
+          if (index !== -1) {
+            chats.splice(index, 1);
+          }
+
+          if (activeChat && activeChat.id === chat.id) {
+            activeChat = null;
+          }
+
+          alert("Group permanently delete ho gaya.");
+
+          // Refresh using your existing chat-list function
+          if (typeof loadChats === "function") {
+            await loadChats();
+          } else if (typeof renderChatList === "function") {
+            renderChatList();
+          }
+        },
+        true
+      );
     }
 
     addOption("Leave Group", async () => {
@@ -1034,6 +1111,7 @@ function openChatOptions(chatId) {
       await leaveGroup(chat);
     }, true);
   }
+
   addOption("Cancel", async () => {
     $("actionDialog").close();
   });
@@ -1044,6 +1122,7 @@ function openChatOptions(chatId) {
     dialog.showModal();
   }
 }
+
 
 
 // ---------- VIEW GROUP MEMBERS ----------
