@@ -1376,17 +1376,42 @@ function openAddMembers(chat) {
     );
 
     for (const profile of matches) {
-      const row = document.createElement("div");
-      row.className = "result-row";
+const row = document.createElement("div");
+row.className = "result-row";
 
-      const name = document.createElement("strong");
-      name.textContent = displayName(profile);
+// Username aur Add button ek hi line mein
+row.style.display = "flex";
+row.style.alignItems = "center";
+row.style.justifyContent = "space-between";
+row.style.gap = "10px";
+row.style.padding = "10px";
+row.style.width = "100%";
+row.style.boxSizing = "border-box";
 
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "primary-btn";
-      button.textContent = "Add";
+const name = document.createElement("strong");
+name.textContent = displayName(profile);
 
+// Username ke liye jagah
+name.style.flex = "1";
+name.style.minWidth = "0";
+name.style.overflow = "hidden";
+name.style.textOverflow = "ellipsis";
+name.style.whiteSpace = "nowrap";
+
+// Chhota Add button
+const button = document.createElement("button");
+button.type = "button";
+button.className = "primary-btn";
+button.textContent = "Add";
+
+button.style.width = "60px";
+button.style.minWidth = "60px";
+button.style.maxWidth = "60px";
+button.style.flexShrink = "0";
+button.style.padding = "7px 8px";
+button.style.margin = "0";
+button.style.fontSize = "14px";
+button.style.boxSizing = "border-box";  
       button.addEventListener("click", async () => {
         button.disabled = true;
 
