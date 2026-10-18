@@ -167,3 +167,54 @@ body {
     margin: 0 0 12px;
   }
 }
+
+/* ===== ShadowChat Banner Ads ===== */
+
+.shadowchat-ad {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 4px;
+  margin: 12px auto;
+  overflow: hidden;
+}
+
+.shadowchat-ad-label {
+  font-size: 10px;
+  color: #888;
+  text-align: center;
+  margin-bottom: 5px;
+}
+
+.shadowchat-ad-content {
+  width: 320px;
+  max-width: 100%;
+  min-height: 50px;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.shadowchat-ad-content iframe {
+  max-width: 100%;
+  border: none;
+}
+
+/* Phone screen support */
+@media (max-width: 480px) {
+  .shadowchat-ad {
+    padding: 10px 2px;
+    margin: 8px auto;
+  }
+
+  .shadowchat-ad-content {
+    width: 320px;
+    max-width: 100%;
+  }
+}
