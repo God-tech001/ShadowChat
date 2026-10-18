@@ -1327,32 +1327,30 @@ function openManageGroupAdmins(chat) {
   $("actionDialog").showModal();
 }
 
-// ---------- HIDE CHAT: CURRENT USER ONLY ----------
+
+ // ---------- HIDE CHAT: CURRENT USER ONLY ----------
 async function hideChat(chat) {
+  if (!chat || !currentUser) return;
+
   if (!confirm(
     "Ye chat sirf tumhari list se hide hogi. Doosre members ke messages delete nahi honge. Continue?"
   )) return;
 
   try {
-    const { data: existing, error: findError } = await supabaseClient
+    const { error } = await supabaseClient
       .from("hidden_chats")
-      .select("group_id")
-      .eq("user_id", currentUser.id)
-      .eq("group_id", chat.id)
-      .maybeSingle();
-
-    if (findError) throw findError;
-
-    if (!existing) {
-      const { error } = await supabaseClient
-        .from("hidden_chats")
-        .insert({
+      .upsert(
+        {
           user_id: currentUser.id,
           group_id: chat.id
-        });
+        },
+        {
+          onConflict: "user_id,group_id",
+          ignoreDuplicates: true
+        }
+      );
 
-      if (error) throw error;
-    }
+    if (error) throw error;
 
     hiddenChatIds.add(chat.id);
 
@@ -1362,14 +1360,19 @@ async function hideChat(chat) {
       $("homeScreen").hidden = false;
     }
 
-    $("actionDialog").close();
+    const dialog = $("actionDialog");
+    if (dialog?.open) dialog.close();
+
     renderChats();
     renderGroups();
+
     toast("Chat tumhari list se hide ho gayi.");
   } catch (error) {
+    console.error("Hide chat error:", error);
     toast("Chat hide nahi hui: " + error.message);
   }
 }
+
 
 // ---------- BLOCK / UNBLOCK USER ----------
 async function blockUser(userId) {
