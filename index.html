@@ -6,182 +6,365 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#075e54">
   <title>ShadowChat</title>
+
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+  <style>
+    /* Banner ad containers */
+    .shadowchat-ad {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 4px;
+      margin: 12px auto;
+      overflow: hidden;
+    }
+
+    .shadowchat-ad-label {
+      font-size: 10px;
+      color: #888;
+      text-align: center;
+      margin-bottom: 5px;
+    }
+
+    .shadowchat-ad-content {
+      width: 320px;
+      max-width: 100%;
+      min-height: 50px;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    .shadowchat-ad-content iframe {
+      max-width: 100%;
+      border: 0;
+    }
+  </style>
 </head>
+
 <body>
 <div class="app">
+
   <header class="topbar">
     <div>
       <h1>ShadowChat <i class="fa-solid fa-shield-halved"></i></h1>
       <p>Your identity, your voice.</p>
     </div>
+
     <button class="icon-btn" id="profileBtn" aria-label="Account">
       <i class="fa-regular fa-user"></i>
     </button>
   </header>
 
+  <!-- LOGIN / SIGN UP -->
   <section id="authScreen" class="auth-screen">
-    <div class="logo-circle"><i class="fa-solid fa-comments"></i></div>
+    <div class="logo-circle">
+      <i class="fa-solid fa-comments"></i>
+    </div>
+
     <h2>Welcome to ShadowChat</h2>
     <p class="muted">Chat freely. Keep your identity private.</p>
 
     <div class="auth-tabs">
-      <button type="button" class="auth-tab active" data-auth="login">Login</button>
-      <button type="button" class="auth-tab" data-auth="signup">Sign up</button>
+      <button type="button" class="auth-tab active" data-auth="login">
+        Login
+      </button>
+      <button type="button" class="auth-tab" data-auth="signup">
+        Sign up
+      </button>
     </div>
 
     <form id="authForm">
-      <label for="authName" id="nameLabel" hidden>Display username</label>
-      <input id="authName" placeholder="Choose a username"
-        maxlength="24" autocomplete="username" hidden>
+      <label for="authName" id="nameLabel" hidden>
+        Display username
+      </label>
+
+      <input id="authName"
+        placeholder="Choose a username"
+        maxlength="24"
+        autocomplete="username"
+        hidden>
 
       <label for="authEmail">Email address</label>
-      <input id="authEmail" type="email" placeholder="you@gmail.com"
-        autocomplete="email" required>
+      <input id="authEmail"
+        type="email"
+        placeholder="you@gmail.com"
+        autocomplete="email"
+        required>
 
       <label for="authPassword">Password</label>
-      <input id="authPassword" type="password"
-        placeholder="At least 6 characters" minlength="6"
-        autocomplete="current-password" required>
+      <input id="authPassword"
+        type="password"
+        placeholder="At least 6 characters"
+        minlength="6"
+        autocomplete="current-password"
+        required>
 
-      <button class="primary-btn" type="submit" id="authSubmit">Login</button>
+      <button class="primary-btn" type="submit" id="authSubmit">
+        Login
+      </button>
     </form>
 
     <p id="authMessage" class="notice" role="status"></p>
     <p class="muted tiny">Use a username instead of your real name.</p>
   </section>
 
+  <!-- MAIN APP -->
   <main id="mainScreen" hidden>
+
+    <!-- HOME -->
     <section id="homeScreen">
       <div class="search-box">
         <i class="fa-solid fa-magnifying-glass"></i>
-        <input id="searchInput" placeholder="Search chats..." autocomplete="off">
-        <button id="clearSearch" type="button" aria-label="Clear search" hidden>×</button>
+
+        <input id="searchInput"
+          placeholder="Search chats..."
+          autocomplete="off">
+
+        <button id="clearSearch"
+          type="button"
+          aria-label="Clear search"
+          hidden>×</button>
       </div>
 
       <div class="quick-actions">
         <button id="newChatBtn" type="button">
-          <i class="fa-solid fa-user-plus"></i> New chat
+          <i class="fa-solid fa-user-plus"></i>
+          New chat
         </button>
+
         <button id="newGroupBtn" type="button">
-          <i class="fa-solid fa-users"></i> New group
+          <i class="fa-solid fa-users"></i>
+          New group
         </button>
       </div>
 
       <div class="section-heading">
-        <h2>Your chats</h2><span id="chatCount">0</span>
+        <h2>Your chats</h2>
+        <span id="chatCount">0</span>
       </div>
+
       <div id="chatList"></div>
 
       <div id="emptyState" class="empty-state">
-        <div class="empty-icon"><i class="fa-regular fa-comments"></i></div>
+        <div class="empty-icon">
+          <i class="fa-regular fa-comments"></i>
+        </div>
+
         <h3>Your chats start here</h3>
         <p>Create a group or start a private chat by username.</p>
-        <button class="primary-btn" id="emptyNewChat" type="button">Find people</button>
+
+        <button class="primary-btn" id="emptyNewChat" type="button">
+          Find people
+        </button>
+      </div>
+
+      <!-- HOME BANNER: Chat List ke neeche -->
+      <div class="shadowchat-ad" id="homeBannerAd">
+        <span class="shadowchat-ad-label">Advertisement</span>
+        <div class="shadowchat-ad-content" id="homeBannerAdContent"></div>
       </div>
     </section>
 
+    <!-- PRIVATE / GROUP CHAT -->
     <section id="chatScreen" hidden>
       <div class="chat-header">
-        <button id="backBtn" class="icon-btn" type="button" aria-label="Back">
+        <button id="backBtn"
+          class="icon-btn"
+          type="button"
+          aria-label="Back">
           <i class="fa-solid fa-arrow-left"></i>
         </button>
+
         <div class="avatar" id="chatAvatar">S</div>
+
         <div class="chat-heading">
           <h2 id="chatTitle">Chat</h2>
           <p id="chatSubtitle">Private conversation</p>
         </div>
-        <button id="chatMenuBtn" class="icon-btn" type="button" aria-label="Chat options">
+
+        <button id="chatMenuBtn"
+          class="icon-btn"
+          type="button"
+          aria-label="Chat options">
           <i class="fa-solid fa-ellipsis-vertical"></i>
         </button>
       </div>
 
       <div id="messageList" class="message-list"></div>
+
       <form id="messageForm" class="message-form">
-        <input id="messageInput" maxlength="2000"
-          placeholder="Type a message..." autocomplete="off" required>
-        <button class="send-btn" type="submit" aria-label="Send message">
+        <input id="messageInput"
+          maxlength="2000"
+          placeholder="Type a message..."
+          autocomplete="off"
+          required>
+
+        <button class="send-btn"
+          type="submit"
+          aria-label="Send message">
           <i class="fa-solid fa-paper-plane"></i>
         </button>
       </form>
     </section>
 
+    <!-- GROUPS -->
     <section id="groupsScreen" hidden>
       <div class="page-heading">
         <h2>Your groups</h2>
-        <button id="groupsNewBtn" class="round-btn" type="button" aria-label="Create group">
+
+        <button id="groupsNewBtn"
+          class="round-btn"
+          type="button"
+          aria-label="Create group">
           <i class="fa-solid fa-plus"></i>
         </button>
       </div>
-      <p class="muted">Groups you create or join appear here.</p>
+
+      <p class="muted">
+        Groups you create or join appear here.
+      </p>
+
       <div id="groupsList"></div>
+
+      <!-- GROUPS BANNER: Groups List ke neeche -->
+      <div class="shadowchat-ad" id="groupsBannerAd">
+        <span class="shadowchat-ad-label">Advertisement</span>
+        <div class="shadowchat-ad-content" id="groupsBannerAdContent"></div>
+      </div>
     </section>
 
+    <!-- SAFETY -->
     <section id="safetyScreen" hidden>
-      <div class="page-heading"><h2>Safety &amp; privacy</h2></div>
+      <div class="page-heading">
+        <h2>Safety &amp; privacy</h2>
+      </div>
+
       <div class="info-card">
         <i class="fa-solid fa-user-secret"></i>
         <h3>Keep your identity private</h3>
-        <p>Use a username. Never share passwords, addresses or personal details in public groups.</p>
+        <p>
+          Use a username. Never share passwords, addresses or personal
+          details in public groups.
+        </p>
       </div>
+
       <div class="info-card">
         <i class="fa-solid fa-shield-halved"></i>
         <h3>Respect everyone</h3>
-        <p>Listed abusive words are masked. Repeated violations may suspend messaging.</p>
+        <p>
+          Listed abusive words are masked. Repeated violations may
+          suspend messaging.
+        </p>
+      </div>
+
+      <!-- SAFETY BANNER: Aakhri Information Card ke neeche -->
+      <div class="shadowchat-ad" id="safetyBannerAd">
+        <span class="shadowchat-ad-label">Advertisement</span>
+        <div class="shadowchat-ad-content" id="safetyBannerAdContent"></div>
       </div>
     </section>
 
+    <!-- ACCOUNT -->
     <section id="accountScreen" hidden>
-      <div class="page-heading"><h2>Your account</h2></div>
+      <div class="page-heading">
+        <h2>Your account</h2>
+      </div>
+
       <div class="account-card">
         <div class="avatar large" id="accountAvatar">S</div>
+
         <h2 id="accountUsername">@shadow</h2>
         <p id="accountEmail" class="muted"></p>
-        <p class="muted tiny">Your email is private from other chat members.</p>
+
+        <p class="muted tiny">
+          Your email is private from other chat members.
+        </p>
+
         <div class="moderation-status" id="moderationStatus"></div>
+
         <button id="logoutBtn" class="danger-btn" type="button">
-          <i class="fa-solid fa-right-from-bracket"></i> Log out
+          <i class="fa-solid fa-right-from-bracket"></i>
+          Log out
         </button>
       </div>
+
       <div class="group-requests-section">
         <div class="page-heading request-heading">
           <h2>Group Requests</h2>
           <span id="groupRequestCount" class="request-count">0</span>
         </div>
+
         <div id="groupRequestsList"></div>
+      </div>
+
+      <!-- ACCOUNT BANNER: Group Requests ke neeche -->
+      <div class="shadowchat-ad" id="accountBannerAd">
+        <span class="shadowchat-ad-label">Advertisement</span>
+        <div class="shadowchat-ad-content" id="accountBannerAdContent"></div>
       </div>
     </section>
 
+    <!-- BOTTOM NAVIGATION -->
     <nav class="bottom-nav">
-      <button class="nav-btn active" data-page="homeScreen" type="button">
-        <i class="fa-solid fa-message"></i><span>Chats</span>
+      <button class="nav-btn active"
+        data-page="homeScreen"
+        type="button">
+        <i class="fa-solid fa-message"></i>
+        <span>Chats</span>
       </button>
-      <button class="nav-btn" data-page="groupsScreen" type="button">
-        <i class="fa-solid fa-users"></i><span>Groups</span>
+
+      <button class="nav-btn"
+        data-page="groupsScreen"
+        type="button">
+        <i class="fa-solid fa-users"></i>
+        <span>Groups</span>
       </button>
-      <button class="nav-btn" data-page="safetyScreen" type="button">
-        <i class="fa-solid fa-shield-halved"></i><span>Safety</span>
+
+      <button class="nav-btn"
+        data-page="safetyScreen"
+        type="button">
+        <i class="fa-solid fa-shield-halved"></i>
+        <span>Safety</span>
       </button>
-      <button class="nav-btn" data-page="accountScreen" type="button">
-        <i class="fa-regular fa-user"></i><span>Account</span>
+
+      <button class="nav-btn"
+        data-page="accountScreen"
+        type="button">
+        <i class="fa-regular fa-user"></i>
+        <span>Account</span>
       </button>
     </nav>
+
   </main>
 </div>
 
+<!-- ACTION DIALOG -->
 <dialog id="actionDialog">
   <form method="dialog" class="dialog-top">
     <h2 id="dialogTitle">Options</h2>
     <button class="icon-btn" aria-label="Close">✕</button>
   </form>
+
   <div id="dialogBody"></div>
 </dialog>
 
 <div id="toast" class="toast" role="status"></div>
 
+<!-- SUPABASE -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<!-- EXISTING APP JAVASCRIPT -->
 <script src="script.js"></script>
+
 </body>
 </html>
