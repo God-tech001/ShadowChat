@@ -131,3 +131,39 @@ body {
     flex-shrink: 0;
   }
 }
+
+/* Fix: Search box visible on mobile */
+
+.search-box {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  position: relative;
+  visibility: visible;
+  opacity: 1;
+}
+
+.search-box input {
+  display: block !important;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 16px;
+}
+
+#homeScreen {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  #homeScreen .search-box {
+    display: flex !important;
+    margin: 0 0 12px;
+  }
+}
