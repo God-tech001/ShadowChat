@@ -30,6 +30,8 @@ let hiddenChatIds = new Set();
 let blockedUserIds = new Set();
 let adminGroupIds = new Set();
 let realtimeChannel = null;
+let messageChannel = null;
+let subscribedChatId = null;
 let authListener = null;
 let authMode = "login";
 
@@ -704,6 +706,54 @@ async function openChat(chatId) {
   await loadMessages(chat.id);
 }
 
+
+ // ---------- RENDER MESSAGES ----------
+function renderMessages() {
+  const list = $("messageList");
+
+  if (!list) {
+    console.error('HTML mein id="messageList" nahi mila.');
+    return;
+  }
+
+  list.replaceChildren();
+
+  if (!activeChat || !currentUser) return;
+
+  messages
+    .filter(m => m.chat_id === activeChat.id)
+    .forEach(message => {
+      const bubble = document.createElement("div");
+
+      bubble.className =
+        "message" +
+        (message.sender_id === currentUser.id ? " mine" : "");
+
+      const sender = document.createElement("span");
+      sender.className = "sender";
+      sender.textContent =
+        message.sender_id === currentUser.id
+          ? "You"
+          : displayName(profileFor(message.sender_id));
+
+      const content = document.createElement("div");
+      content.textContent = message.body ?? message.message ?? "";
+
+      const time = document.createElement("span");
+      time.className = "time";
+      time.textContent = message.created_at
+        ? new Date(message.created_at).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit"
+          })
+        : "";
+
+      bubble.append(sender, content, time);
+      list.append(bubble);
+    });
+
+  list.scrollTop = list.scrollHeight;
+}
 
  
 // ---------- LOAD / RENDER MESSAGES ----------
