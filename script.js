@@ -388,10 +388,26 @@ function getLastMessage(chatId) {
 }
 
 // ---------- CHAT LIST ----------
-$("searchInput").addEventListener("input", () => {
+
+$("searchInput").addEventListener("input", async () => {
   $("clearSearch").hidden = !$("searchInput").value;
+
+  if (currentUser) {
+    const { data, error } = await supabaseClient
+      .from("profiles")
+      .select("id, username, warning_count, banned");
+
+    if (error) {
+      toast("User search failed: " + error.message);
+      return;
+    }
+
+    profiles = data || [];
+  }
+
   renderChats();
 });
+
 
 $("clearSearch").addEventListener("click", () => {
   $("searchInput").value = "";
