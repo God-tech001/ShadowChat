@@ -1580,8 +1580,15 @@ button.style.boxSizing = "border-box";
 async function leaveGroup(chat) {
   if (!chat || chat.type !== "group") return;
 
-  if (!confirm("Kya tum is group ko chhodna chahte ho?")) return;
+  if (!currentUser) {
+    return toast("Pehle login karo.");
+  }
 
+  if (!confirm("Kya tum is group ko chhodna chahte ho?")) {
+    return;
+  }
+
+  // Group creator cannot leave until ownership transfer is supported
   if (chat.created_by === currentUser.id) {
     return toast(
       "Group creator abhi group nahi chhod sakta. Pehle group transfer feature chahiye."
@@ -1589,44 +1596,54 @@ async function leaveGroup(chat) {
   }
 
   try {
-    const members = (chat.members || [])
-      .filter(id => id !== currentUser.id);
+    // Call the Supabase RPC function instead of directly updating chats.
+    const { data, error } = await supabaseClient.rpc(
+      "leave_chat_group",
+      {
+        p_group_id: chat.id
+      }
+    );
 
-    const { error: updateError } = await supabaseClient
-      .from("chats")
-      .update({
-        members,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", chat.id);
+    if (error) throw error;
 
-    if (updateError) throw updateError;
-
-    const { error: memberError } = await supabaseClient
-      .from("group_members")
-      .delete()
-      .eq("group_id", chat.id)
-      .eq("user_id", currentUser.id);
-
-    if (memberError) {
-      console.warn("Membership row removal failed:", memberError.message);
+    if (data !== true) {
+      throw new Error("Supabase ne group chhodne ki confirmation nahi di.");
     }
 
-    await supabaseClient
-      .from("group_admins")
-      .delete()
-      .eq("group_id", chat.id)
-      .eq("user_id", currentUser.id);
+    // Remove the group from the local chat list
+    const index = chats.findIndex(c => c.id === chat.id);
 
-    $("actionDialog").close();
-    activeChat = null;
+    if (index !== -1) {
+      chats.splice(index, 1);
+    }
+
+    // Close the current group screen
+    if (activeChat && activeChat.id === chat.id) {
+      activeChat = null;
+    }
+
+    const dialog = $("actionDialog");
+
+    if (dialog && dialog.open) {
+      dialog.close();
+    }
+
     $("chatScreen").hidden = true;
 
-    await refreshData();
+    // Refresh existing app data
+    if (typeof refreshData === "function") {
+      await refreshData();
+    }
+
     showPage("groupsScreen");
     toast("You left the group.");
+
   } catch (error) {
-    toast("Group nahi chhod paye: " + error.message);
+    console.error("Leave group error:", error);
+
+    toast(
+      "Group nahi chhod paye: " + error.message
+    );
   }
 }
 
