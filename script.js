@@ -28,7 +28,7 @@ let messages = [];
 let groupRequests = [];
 let hiddenChatIds = new Set();
 let blockedUserIds = new Set();
-let groupAdminIds = new Set();
+let adminGroupIds = new Set();
 let realtimeChannel = null;
 let authListener = null;
 let authMode = "login";
@@ -52,7 +52,6 @@ function displayName(profile) {
 
 function toast(message) {
   const el = $("toast");
-
   if (!el) {
     console.log(message);
     return;
@@ -64,9 +63,7 @@ function toast(message) {
 }
 
 function setAuthMessage(message) {
-  if ($("authMessage")) {
-    $("authMessage").textContent = message;
-  }
+  if ($("authMessage")) $("authMessage").textContent = message;
 }
 
 function showAuth() {
@@ -92,24 +89,23 @@ function profileFor(id) {
 }
 
 function chatTitle(chat) {
-  if (chat.type === "group") {
-    return chat.name || "Group";
-  }
+  if (chat.type === "group") return chat.name || "Group";
 
-  const otherId = (chat.members || [])
-    .find(id => id !== currentUser.id);
-
+  const otherId = (chat.members || []).find(id => id !== currentUser.id);
   return displayName(profileFor(otherId));
 }
 
-// Creator and promoted admins can manage groups.
-function isGroupAdmin(chat) {
-  return !!chat &&
-    chat.type === "group" &&
-    (
-      chat.created_by === currentUser?.id ||
-      groupAdminIds.has(chat.id)
-    );
+// Creator is always an admin. Other admins are loaded from Supabase.
+function isGroupAdmin(chat, userId = currentUser?.id) {
+  if (!chat || chat.type !== "group" || !userId) return false;
+
+  return chat.created_by === userId ||
+    (userId === currentUser?.id && adminGroupIds.has(chat.id)) ||
+    chat._adminIds?.includes(userId);
+}
+
+function isGroupCreator(chat) {
+  return !!chat && chat.created_by === currentUser?.id;
 }
 
 function moderateText(input) {
@@ -118,7 +114,6 @@ function moderateText(input) {
 
   for (const word of [...BAD_WORDS].sort((a, b) => b.length - a.length)) {
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
     const regex = new RegExp(
       `(^|[^\\p{L}\\p{N}_])(${escaped})(?=$|[^\\p{L}\\p{N}_])`,
       "giu"
@@ -143,17 +138,12 @@ document.querySelectorAll(".auth-tab").forEach(button => {
     });
 
     const signup = authMode === "signup";
-
     $("authName").hidden = !signup;
     $("nameLabel").hidden = !signup;
     $("authName").required = signup;
-
     $("authPassword").autocomplete =
       signup ? "new-password" : "current-password";
-
-    $("authSubmit").textContent =
-      signup ? "Create account" : "Login";
-
+    $("authSubmit").textContent = signup ? "Create account" : "Login";
     setAuthMessage("");
   });
 });
@@ -166,8 +156,8 @@ $("authForm").addEventListener("submit", async event => {
   const password = $("authPassword").value;
   const username = usernameKey($("authName").value);
 
-  if (password.length < 6) {
-    setAuthMessage("Password must be at least 6 characters.");
+  if (!email || password.length < 6) {
+    setAuthMessage("Enter a valid email and password of at least 6 characters.");
     return;
   }
 
@@ -211,21 +201,15 @@ $("authForm").addEventListener("submit", async event => {
 
     if (authMode === "signup" && !result.data.session) {
       $("authPassword").value = "";
-
       setAuthMessage(
-        "Confirmation email bheji gayi hai. Email ka link kholo, " +
-        "phir login karo."
+        "Confirmation email bheji gayi hai. Email ka link kholo, phir login karo."
       );
-
       return;
     }
 
     currentUser = result.data.user;
-
     await loadProfile();
-
     $("authPassword").value = "";
-
     await enterApp();
   } catch (error) {
     setAuthMessage(error.message || "Authentication failed.");
@@ -236,9 +220,7 @@ $("authForm").addEventListener("submit", async event => {
 
 // ---------- PROFILE ----------
 async function loadProfile() {
-  if (!currentUser) {
-    throw new Error("Please log in again.");
-  }
+  if (!currentUser) throw new Error("Please log in again.");
 
   const { data, error } = await supabaseClient
     .from("profiles")
@@ -272,7 +254,6 @@ async function loadProfile() {
     .single();
 
   if (createError) throw createError;
-
   currentProfile = created;
 }
 
@@ -282,12 +263,9 @@ async function enterApp() {
 
   if (isBanned()) {
     await supabaseClient.auth.signOut();
-
     currentUser = null;
     currentProfile = null;
-
     showAuth();
-
     setAuthMessage("This account is suspended from messaging.");
     return;
   }
@@ -296,22 +274,17 @@ async function enterApp() {
 
   $("accountUsername").textContent = displayName(currentProfile);
   $("accountEmail").textContent = currentUser.email || "";
-
   $("accountAvatar").textContent =
     currentProfile.username[0]?.toUpperCase() || "S";
 
   updateModerationStatus();
-
   await refreshData();
-
   showPage("homeScreen");
-
   subscribeRealtime();
 }
 
 function updateModerationStatus() {
   const el = $("moderationStatus");
-
   if (!el || !currentProfile) return;
 
   const count = Number(currentProfile.warning_count || 0);
@@ -332,26 +305,20 @@ $("logoutBtn").addEventListener("click", async () => {
     }
 
     const { error } = await supabaseClient.auth.signOut();
-
     if (error) throw error;
 
     currentUser = null;
     currentProfile = null;
     activeChat = null;
-
     chats = [];
     messages = [];
-
     hiddenChatIds.clear();
     blockedUserIds.clear();
-    groupAdminIds.clear();
+    adminGroupIds.clear();
 
     showAuth();
-
     $("authForm").reset();
-
     document.querySelector('[data-auth="login"]').click();
-
     toast("Logged out.");
   } catch (error) {
     toast(error.message || "Logout failed.");
@@ -364,7 +331,6 @@ function showPage(page) {
 
   activePage = page;
   activeChat = null;
-
   $("chatScreen").hidden = true;
 
   ["homeScreen", "groupsScreen", "safetyScreen", "accountScreen"]
@@ -382,18 +348,11 @@ function showPage(page) {
 }
 
 document.querySelectorAll(".nav-btn").forEach(button => {
-  button.addEventListener("click", () => {
-    showPage(button.dataset.page);
-  });
+  button.addEventListener("click", () => showPage(button.dataset.page));
 });
 
-$("profileBtn").addEventListener("click", () => {
-  showPage("accountScreen");
-});
-
-$("backBtn").addEventListener("click", () => {
-  showPage("homeScreen");
-});
+$("profileBtn").addEventListener("click", () => showPage("accountScreen"));
+$("backBtn").addEventListener("click", () => showPage("homeScreen"));
 
 // ---------- LOAD SUPABASE DATA ----------
 async function refreshData() {
@@ -434,11 +393,7 @@ async function refreshData() {
   ]);
 
   for (const result of [
-    profileResult,
-    chatResult,
-    requestResult,
-    hiddenResult,
-    blockResult
+    profileResult, chatResult, requestResult, hiddenResult, blockResult
   ]) {
     if (result.error) throw result.error;
   }
@@ -458,26 +413,32 @@ async function refreshData() {
   currentProfile =
     profiles.find(p => p.id === currentUser.id) || currentProfile;
 
-  // Load all group admin roles visible to this user.
-  groupAdminIds = new Set();
+  // Load the additional admins for groups the user belongs to.
+  adminGroupIds.clear();
 
   const groupIds = chats
     .filter(chat => chat.type === "group")
     .map(chat => chat.id);
 
   if (groupIds.length) {
-    const { data: adminRows, error: adminError } =
-      await supabaseClient
-        .from("group_admins")
-        .select("group_id, user_id")
-        .in("group_id", groupIds);
+    const { data: adminRows, error: adminError } = await supabaseClient
+      .from("group_admins")
+      .select("group_id, user_id")
+      .in("group_id", groupIds);
 
     if (adminError) {
-      console.error("Could not load group admins:", adminError.message);
+      console.warn("Could not load group admins:", adminError.message);
+      // Creator still works as admin if this table or its policies are not set up.
     } else {
+      chats.forEach(chat => {
+        chat._adminIds = (adminRows || [])
+          .filter(row => row.group_id === chat.id)
+          .map(row => row.user_id);
+      });
+
       (adminRows || []).forEach(row => {
         if (row.user_id === currentUser.id) {
-          groupAdminIds.add(row.group_id);
+          adminGroupIds.add(row.group_id);
         }
       });
     }
@@ -496,10 +457,7 @@ async function refreshData() {
 
 function getLastMessage(chatId) {
   const list = messages.filter(m => m.chat_id === chatId);
-
-  return list.length
-    ? list[list.length - 1].body
-    : "No messages yet";
+  return list.length ? list[list.length - 1].body : "No messages yet";
 }
 
 // ---------- CHAT LIST ----------
@@ -554,7 +512,6 @@ function renderChats() {
 
     const avatar = document.createElement("div");
     avatar.className = "avatar";
-
     avatar.textContent =
       chatTitle(chat).replace("@", "")[0]?.toUpperCase() || "S";
 
@@ -567,21 +524,10 @@ function renderChats() {
     const preview = document.createElement("p");
     preview.textContent = getLastMessage(chat.id);
 
-    const menu = document.createElement("button");
-    menu.type = "button";
-    menu.textContent = "⋮";
-    menu.setAttribute("aria-label", "Chat options");
-
-    menu.addEventListener("click", event => {
-      event.stopPropagation();
-      openChatOptions(chat.id);
-    });
-
+    // No three-dot menu in the chat list.
     info.append(title, preview);
-    row.append(avatar, info, menu);
-
+    row.append(avatar, info);
     row.addEventListener("click", () => openChat(chat.id));
-
     list.append(row);
   });
 
@@ -616,9 +562,7 @@ function renderChats() {
 
         info.append(name, subtitle);
         row.append(info);
-
         row.addEventListener("click", () => startDirectChat(profile));
-
         list.append(row);
       });
   }
@@ -630,7 +574,6 @@ $("emptyNewChat").addEventListener("click", openFindPeople);
 
 function openFindPeople() {
   $("dialogTitle").textContent = "Find people";
-
   $("dialogBody").innerHTML = `
     <label class="dialog-label" for="peopleSearch">Username</label>
     <input class="dialog-input" id="peopleSearch"
@@ -640,20 +583,16 @@ function openFindPeople() {
   $("actionDialog").showModal();
 
   $("peopleSearch").addEventListener("input", renderPeopleResults);
-
   renderPeopleResults();
 }
 
 function renderPeopleResults() {
   const input = $("peopleSearch");
   const results = $("peopleResults");
-
   if (!input || !results) return;
 
   const query = usernameKey(input.value);
-
   results.replaceChildren();
-
   if (!query) return;
 
   profiles
@@ -709,12 +648,10 @@ async function startDirectChat(profile) {
           .eq("group_id", existing.id);
 
         if (error) throw error;
-
         hiddenChatIds.delete(existing.id);
       }
 
       await refreshData();
-
       return openChat(existing.id);
     }
 
@@ -733,7 +670,6 @@ async function startDirectChat(profile) {
     if (error) throw error;
 
     await refreshData();
-
     openChat(data.id);
   } catch (error) {
     toast(error.message || "Could not create chat.");
@@ -745,10 +681,7 @@ async function openChat(chatId) {
   const chat = chats.find(c => c.id === chatId);
 
   if (!chat) return toast("Chat not found.");
-
-  if (hiddenChatIds.has(chatId)) {
-    return toast("This chat is hidden.");
-  }
+  if (hiddenChatIds.has(chatId)) return toast("This chat is hidden.");
 
   activeChat = chat;
 
@@ -759,7 +692,6 @@ async function openChat(chatId) {
   $("chatScreen").hidden = false;
 
   $("chatTitle").textContent = chatTitle(chat);
-
   $("chatSubtitle").textContent =
     chat.type === "group"
       ? `${(chat.members || []).length} members` +
@@ -795,7 +727,6 @@ async function loadMessages(chatId) {
 
 function renderMessages() {
   const list = $("messageList");
-
   list.replaceChildren();
 
   if (!activeChat) return;
@@ -804,30 +735,22 @@ function renderMessages() {
     .filter(m => m.chat_id === activeChat.id)
     .forEach(message => {
       const bubble = document.createElement("div");
-
       bubble.className =
-        "message" +
-        (message.sender_id === currentUser.id ? " mine" : "");
+        "message" + (message.sender_id === currentUser.id ? " mine" : "");
 
       const sender = document.createElement("span");
       sender.className = "sender";
-
-      sender.textContent =
-        message.sender_id === currentUser.id
-          ? "You"
-          : displayName(profileFor(message.sender_id));
+      sender.textContent = message.sender_id === currentUser.id
+        ? "You"
+        : displayName(profileFor(message.sender_id));
 
       const content = document.createElement("div");
       content.textContent = message.body;
 
       const time = document.createElement("span");
       time.className = "time";
-
       time.textContent = new Date(message.created_at)
-        .toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit"
-        });
+        .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
       bubble.append(sender, content, time);
       list.append(bubble);
@@ -853,17 +776,14 @@ $("messageForm").addEventListener("submit", async event => {
   }
 
   const raw = $("messageInput").value.trim();
-
   if (!raw) return;
 
   const result = moderateText(raw);
-
   $("messageInput").value = "";
 
   try {
     if (result.found) {
-      const nextCount =
-        Number(currentProfile.warning_count || 0) + 1;
+      const nextCount = Number(currentProfile.warning_count || 0) + 1;
 
       const { data, error } = await supabaseClient
         .from("profiles")
@@ -878,7 +798,6 @@ $("messageForm").addEventListener("submit", async event => {
       if (error) throw error;
 
       currentProfile = data;
-
       updateModerationStatus();
 
       if (data.banned) {
@@ -913,7 +832,6 @@ $("groupsNewBtn").addEventListener("click", openCreateGroup);
 
 function openCreateGroup() {
   $("dialogTitle").textContent = "Create group";
-
   $("dialogBody").innerHTML = `
     <form id="groupForm">
       <label class="dialog-label" for="groupName">Group name</label>
@@ -941,7 +859,6 @@ function openCreateGroup() {
 
     const name = $("groupName").value.trim();
     const category = $("groupType").value;
-
     if (!name) return;
 
     try {
@@ -967,19 +884,24 @@ function openCreateGroup() {
         });
 
       if (memberError) {
-        console.warn(
-          "Group created; membership row failed:",
-          memberError.message
-        );
+        console.warn("Group membership row failed:", memberError.message);
       }
 
-      // Creator is recognized as admin by created_by.
-      await refreshData();
+      // Store the creator in group_admins as well.
+      const { error: adminError } = await supabaseClient
+        .from("group_admins")
+        .upsert(
+          { group_id: data.id, user_id: currentUser.id },
+          { onConflict: "group_id,user_id" }
+        );
+
+      if (adminError) {
+        console.warn("Creator remains admin through created_by:", adminError.message);
+      }
 
       $("actionDialog").close();
-
+      await refreshData();
       showPage("groupsScreen");
-
       toast("Group created. You are the group admin.");
     } catch (error) {
       toast(error.message || "Could not create group.");
@@ -990,7 +912,6 @@ function openCreateGroup() {
 // ---------- GROUP LIST ----------
 function renderGroups() {
   const list = $("groupsList");
-
   if (!list) return;
 
   list.replaceChildren();
@@ -1015,34 +936,29 @@ function renderGroups() {
     title.textContent = chat.name;
 
     const details = document.createElement("p");
-
     details.textContent =
       `${chat.category || "Group"} · ${(chat.members || []).length} members` +
       (isGroupAdmin(chat) ? " · You are admin" : "");
 
-    const menu = document.createElement("button");
-    menu.type = "button";
-    menu.textContent = "⋮";
-    menu.setAttribute("aria-label", "Group options");
-
-    menu.addEventListener("click", event => {
-      event.stopPropagation();
-      openChatOptions(chat.id);
-    });
+    const spacer = document.createElement("span");
+    spacer.textContent = "";
 
     info.append(title, details);
-    row.append(info, menu);
-
+    row.append(info, spacer);
     row.addEventListener("click", () => openChat(chat.id));
-
     list.append(row);
   });
 }
 
-// ---------- CHAT OPTIONS ----------
-$("chatMenuBtn").addEventListener("click", () => {
+// ---------- CHAT OPTIONS: INSIDE CHAT ONLY ----------
+$("chatMenuBtn").addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+
   if (activeChat) {
     openChatOptions(activeChat.id);
+  } else {
+    toast("Pehle chat kholo.");
   }
 });
 
@@ -1051,39 +967,27 @@ function openChatOptions(chatId) {
 
   if (!chat || !currentUser) return;
 
+  $("dialogTitle").textContent =
+    chat.type === "group" ? "Group Options" : "Chat Options";
+
   const body = $("dialogBody");
-
-  $("dialogTitle").textContent = "Chat Options";
-
   body.replaceChildren();
 
   function addOption(label, handler, danger = false) {
     const button = document.createElement("button");
-
     button.type = "button";
     button.className = danger ? "danger-btn" : "primary-btn";
     button.textContent = label;
     button.style.margin = "6px";
 
     button.addEventListener("click", async () => {
-      $("actionDialog").close();
-
-      try {
-        await handler();
-      } catch (error) {
-        toast(error.message || "Action failed.");
-      }
+      await handler();
     });
 
     body.append(button);
   }
 
-  // Works for both direct chats and groups.
-  addOption(
-    "Delete / Hide Chat",
-    () => hideChat(chat),
-    true
-  );
+  addOption("Delete / Hide Chat", () => hideChat(chat), true);
 
   if (chat.type === "direct") {
     const otherId = (chat.members || [])
@@ -1094,83 +998,255 @@ function openChatOptions(chatId) {
 
       addOption(
         blocked ? "Unblock User" : "Block User",
-        () => blocked
-          ? unblockUser(otherId)
-          : blockUser(otherId),
+        async () => {
+          $("actionDialog").close();
+          if (blocked) await unblockUser(otherId);
+          else await blockUser(otherId);
+        },
         !blocked
       );
     }
   }
 
   if (chat.type === "group") {
-    if (isGroupAdmin(chat)) {
-      addOption(
-        "Add Members",
-        () => openAddMembers(chat)
-      );
+    const admin = isGroupAdmin(chat);
 
-      addOption(
-        "Make Another Member Admin",
-        () => openMakeAdmin(chat)
-      );
+    const summary = document.createElement("p");
+    summary.className = "dialog-help";
+    summary.textContent = admin
+      ? `You are an admin. Members: ${(chat.members || []).length}`
+      : `Members: ${(chat.members || []).length}`;
+
+    body.append(summary);
+
+    if (admin) {
+      addOption("＋ Add Members", () => openAddMembers(chat));
+
+      addOption("Manage Group Admins", () => openManageGroupAdmins(chat));
+
+      addOption("View Group Members", () => showGroupMembers(chat));
+    } else {
+      addOption("View Group Admin", () => showGroupAdmins(chat));
     }
 
-    addOption(
-      "View Group Admin",
-      () => viewGroupAdmins(chat)
-    );
-
-    addOption(
-      "Exit Group",
-      () => exitGroup(chat),
-      true
-    );
+    addOption("Leave Group", async () => {
+      $("actionDialog").close();
+      await leaveGroup(chat);
+    }, true);
   }
 
-  addOption("Cancel", async () => {});
+  addOption("Cancel", async () => {
+    $("actionDialog").close();
+  });
+}
+
+// ---------- VIEW GROUP MEMBERS ----------
+function showGroupMembers(chat) {
+  $("dialogTitle").textContent = "Group Members";
+
+  const body = $("dialogBody");
+  body.replaceChildren();
+
+  (chat.members || []).forEach(memberId => {
+    const profile = profileFor(memberId);
+    if (!profile) return;
+
+    const row = document.createElement("div");
+    row.className = "member-row";
+
+    const info = document.createElement("div");
+    info.className = "member-info";
+
+    const name = document.createElement("strong");
+    name.textContent = displayName(profile);
+
+    const role = document.createElement("small");
+    role.textContent = isGroupAdmin(chat, memberId) ? "Admin" : "Member";
+
+    info.append(name, role);
+    row.append(info);
+    body.append(row);
+  });
+
+  $("actionDialog").showModal();
 }
 
 // ---------- VIEW GROUP ADMINS ----------
-async function viewGroupAdmins(chat) {
-  try {
-    const { data, error } = await supabaseClient
-      .from("group_admins")
-      .select("user_id")
-      .eq("group_id", chat.id);
+function showGroupAdmins(chat) {
+  $("dialogTitle").textContent = "Group Admins";
 
-    if (error) throw error;
+  const body = $("dialogBody");
+  body.replaceChildren();
 
-    const adminIds = new Set(
-      (data || []).map(row => row.user_id)
-    );
+  const adminIds = new Set([
+    chat.created_by,
+    ...(chat._adminIds || [])
+  ]);
 
-    // The original creator remains an admin.
-    if (chat.created_by) {
-      adminIds.add(chat.created_by);
-    }
+  adminIds.forEach(id => {
+    const profile = profileFor(id);
+    if (!profile) return;
 
-    const names = [...adminIds].map(id =>
-      displayName(profileFor(id))
-    );
+    const row = document.createElement("div");
+    row.className = "member-row";
 
-    toast(
-      names.length
-        ? "Group admins: " + names.join(", ")
-        : "No admin details available."
-    );
-  } catch (error) {
-    toast("Could not load admins: " + error.message);
+    const info = document.createElement("div");
+    info.className = "member-info";
+
+    const name = document.createElement("strong");
+    name.textContent = displayName(profile);
+
+    const role = document.createElement("small");
+    role.textContent = id === chat.created_by
+      ? "Creator · Admin"
+      : "Group Admin";
+
+    info.append(name, role);
+    row.append(info);
+    body.append(row);
+  });
+
+  $("actionDialog").showModal();
+}
+
+// ---------- MANAGE MULTIPLE GROUP ADMINS ----------
+function openManageGroupAdmins(chat) {
+  if (!isGroupAdmin(chat)) {
+    return toast("Sirf group admins ye option use kar sakte hain.");
   }
+
+  $("dialogTitle").textContent = "Manage Group Admins";
+
+  const body = $("dialogBody");
+  body.replaceChildren();
+
+  const help = document.createElement("p");
+  help.className = "dialog-help";
+  help.textContent = isGroupCreator(chat)
+    ? "Admins add/remove kar sakte ho. Group creator permanent admin rahega."
+    : "Aap members ko admin bana sakte ho. Existing admins ko remove karne ka adhikar creator ko hai.";
+
+  body.append(help);
+
+  const list = document.createElement("div");
+  list.className = "member-list";
+  body.append(list);
+
+  function renderAdminList() {
+    list.replaceChildren();
+
+    (chat.members || []).forEach(memberId => {
+      const profile = profileFor(memberId);
+      if (!profile) return;
+
+      const row = document.createElement("div");
+      row.className = "member-row";
+
+      const info = document.createElement("div");
+      info.className = "member-info";
+
+      const name = document.createElement("strong");
+      name.textContent = displayName(profile);
+
+      const isAdmin = isGroupAdmin(chat, memberId);
+
+      const role = document.createElement("small");
+      role.textContent = memberId === chat.created_by
+        ? "Creator · Permanent Admin"
+        : isAdmin ? "Admin" : "Member";
+
+      info.append(name, role);
+      row.append(info);
+
+      if (memberId !== chat.created_by && memberId !== currentUser.id) {
+        if (!isAdmin) {
+          const promote = document.createElement("button");
+          promote.type = "button";
+          promote.className = "small-btn";
+          promote.textContent = "Make Admin";
+
+          promote.addEventListener("click", async () => {
+            promote.disabled = true;
+
+            try {
+              const { error } = await supabaseClient
+                .from("group_admins")
+                .upsert(
+                  { group_id: chat.id, user_id: memberId },
+                  { onConflict: "group_id,user_id" }
+                );
+
+              if (error) throw error;
+
+              chat._adminIds = [
+                ...new Set([...(chat._adminIds || []), memberId])
+              ];
+
+              if (memberId === currentUser.id) {
+                adminGroupIds.add(chat.id);
+              }
+
+              toast(`${displayName(profile)} is now an admin.`);
+              await refreshData();
+              openManageGroupAdmins(chats.find(c => c.id === chat.id) || chat);
+            } catch (error) {
+              toast("Admin nahi bana: " + error.message);
+              promote.disabled = false;
+            }
+          });
+
+          row.append(promote);
+        } else if (isGroupCreator(chat)) {
+          const demote = document.createElement("button");
+          demote.type = "button";
+          demote.className = "small-btn danger";
+          demote.textContent = "Remove Admin";
+
+          demote.addEventListener("click", async () => {
+            demote.disabled = true;
+
+            try {
+              const { error } = await supabaseClient
+                .from("group_admins")
+                .delete()
+                .eq("group_id", chat.id)
+                .eq("user_id", memberId);
+
+              if (error) throw error;
+
+              chat._adminIds = (chat._adminIds || [])
+                .filter(id => id !== memberId);
+
+              toast(`${displayName(profile)} is no longer an admin.`);
+              await refreshData();
+              openManageGroupAdmins(chats.find(c => c.id === chat.id) || chat);
+            } catch (error) {
+              toast("Admin remove nahi hua: " + error.message);
+              demote.disabled = false;
+            }
+          });
+
+          row.append(demote);
+        }
+      }
+
+      list.append(row);
+    });
+
+    if (!list.children.length) {
+      list.textContent = "No group members found.";
+    }
+  }
+
+  renderAdminList();
+  $("actionDialog").showModal();
 }
 
 // ---------- HIDE CHAT: CURRENT USER ONLY ----------
 async function hideChat(chat) {
   if (!confirm(
-    "Ye chat sirf tumhari list se hide hogi. " +
-    "Messages aur doosre members ki chat delete nahi hogi. Continue?"
-  )) {
-    return;
-  }
+    "Ye chat sirf tumhari list se hide hogi. Doosre members ke messages delete nahi honge. Continue?"
+  )) return;
 
   try {
     const { data: existing, error: findError } = await supabaseClient
@@ -1201,9 +1277,9 @@ async function hideChat(chat) {
       $("homeScreen").hidden = false;
     }
 
+    $("actionDialog").close();
     renderChats();
     renderGroups();
-
     toast("Chat tumhari list se hide ho gayi.");
   } catch (error) {
     toast("Chat hide nahi hui: " + error.message);
@@ -1214,9 +1290,7 @@ async function hideChat(chat) {
 async function blockUser(userId) {
   if (!userId || userId === currentUser.id) return;
 
-  if (!confirm("Kya tum is user ko block karna chahte ho?")) {
-    return;
-  }
+  if (!confirm("Kya tum is user ko block karna chahte ho?")) return;
 
   try {
     const { data: existing, error: findError } = await supabaseClient
@@ -1240,7 +1314,6 @@ async function blockUser(userId) {
     }
 
     blockedUserIds.add(userId);
-
     toast("User blocked.");
   } catch (error) {
     toast("Block nahi hua: " + error.message);
@@ -1258,7 +1331,6 @@ async function unblockUser(userId) {
     if (error) throw error;
 
     blockedUserIds.delete(userId);
-
     toast("User unblocked.");
   } catch (error) {
     toast("Unblock nahi hua: " + error.message);
@@ -1275,7 +1347,6 @@ function openAddMembers(chat) {
   $("dialogBody").replaceChildren();
 
   const search = document.createElement("input");
-
   search.className = "dialog-input";
   search.placeholder = "Username search karo";
   search.maxLength = 24;
@@ -1284,7 +1355,6 @@ function openAddMembers(chat) {
   results.className = "result-list";
 
   $("dialogBody").append(search, results);
-
   $("actionDialog").showModal();
 
   async function renderResults() {
@@ -1299,12 +1369,7 @@ function openAddMembers(chat) {
       usernameKey(profile.username).includes(query)
     );
 
-    if (!matches.length) {
-      results.textContent = "Koi naya member nahi mila.";
-      return;
-    }
-
-    matches.forEach(profile => {
+    for (const profile of matches) {
       const row = document.createElement("div");
       row.className = "result-row";
 
@@ -1312,7 +1377,6 @@ function openAddMembers(chat) {
       name.textContent = displayName(profile);
 
       const button = document.createElement("button");
-
       button.type = "button";
       button.className = "primary-btn";
       button.textContent = "Add";
@@ -1321,22 +1385,67 @@ function openAddMembers(chat) {
         button.disabled = true;
 
         try {
-          // Database verifies admin permissions.
-          const { error } = await supabaseClient.rpc(
-            "add_group_member",
-            {
-              p_group_id: chat.id,
-              p_user_id: profile.id
-            }
-          );
+          if (!isGroupAdmin(chat)) {
+            throw new Error("Only group admins can add members.");
+          }
 
-          if (error) throw error;
+          // Fetch latest group membership before updating.
+          const { data: latest, error: latestError } = await supabaseClient
+            .from("chats")
+            .select("id, members, created_by")
+            .eq("id", chat.id)
+            .single();
 
+          if (latestError) throw latestError;
+
+          const latestChat = chats.find(c => c.id === chat.id);
+
+          if (
+            latest.created_by !== currentUser.id &&
+            !isGroupAdmin(latestChat)
+          ) {
+            throw new Error("Only group admins can add members.");
+          }
+
+          const members = [...new Set([
+            ...(latest.members || []),
+            profile.id
+          ])];
+
+          const { error: updateError } = await supabaseClient
+            .from("chats")
+            .update({
+              members,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", chat.id);
+
+          if (updateError) throw updateError;
+
+          const { data: existing, error: findError } = await supabaseClient
+            .from("group_members")
+            .select("user_id")
+            .eq("group_id", chat.id)
+            .eq("user_id", profile.id)
+            .maybeSingle();
+
+          if (findError) throw findError;
+
+          if (!existing) {
+            const { error: insertError } = await supabaseClient
+              .from("group_members")
+              .insert({
+                group_id: chat.id,
+                user_id: profile.id
+              });
+
+            if (insertError) throw insertError;
+          }
+
+          chat.members = members;
           toast(displayName(profile) + " added to group.");
-
           await refreshData();
-
-          $("actionDialog").close();
+          renderResults();
         } catch (error) {
           toast("Member add nahi hua: " + error.message);
         } finally {
@@ -1346,159 +1455,68 @@ function openAddMembers(chat) {
 
       row.append(name, button);
       results.append(row);
-    });
+    }
+
+    if (!results.children.length) {
+      results.textContent = "Koi naya member nahi mila.";
+    }
   }
 
   search.addEventListener("input", renderResults);
-
   renderResults();
 }
 
-// ---------- MAKE ANOTHER MEMBER ADMIN ----------
-async function openMakeAdmin(chat) {
-  if (!isGroupAdmin(chat)) {
-    return toast("Sirf group admin kisi member ko admin bana sakta hai.");
-  }
-
-  $("dialogTitle").textContent = "Make Group Admin";
-  $("dialogBody").replaceChildren();
-
-  const search = document.createElement("input");
-
-  search.className = "dialog-input";
-  search.placeholder = "Username search karo";
-  search.maxLength = 24;
-
-  const results = document.createElement("div");
-  results.className = "result-list";
-
-  $("dialogBody").append(search, results);
-
-  $("actionDialog").showModal();
-
-  async function renderResults() {
-    results.replaceChildren();
-
-    let admins;
-
-    try {
-      const { data, error } = await supabaseClient
-        .from("group_admins")
-        .select("user_id")
-        .eq("group_id", chat.id);
-
-      if (error) throw error;
-
-      admins = new Set((data || []).map(row => row.user_id));
-
-      // Creator is also an admin.
-      admins.add(chat.created_by);
-    } catch (error) {
-      results.textContent = "Could not load admin list.";
-      toast(error.message);
-      return;
-    }
-
-    const query = usernameKey(search.value);
-
-    const members = profiles.filter(profile =>
-      profile.id !== currentUser.id &&
-      (chat.members || []).includes(profile.id) &&
-      !admins.has(profile.id) &&
-      usernameKey(profile.username).includes(query)
-    );
-
-    if (!members.length) {
-      results.textContent = "Koi eligible member nahi mila.";
-      return;
-    }
-
-    members.forEach(profile => {
-      const row = document.createElement("div");
-      row.className = "result-row";
-
-      const name = document.createElement("strong");
-      name.textContent = displayName(profile);
-
-      const button = document.createElement("button");
-
-      button.type = "button";
-      button.className = "primary-btn";
-      button.textContent = "Make Admin";
-
-      button.addEventListener("click", async () => {
-        button.disabled = true;
-
-        try {
-          const { error } = await supabaseClient.rpc(
-            "make_group_admin",
-            {
-              p_group_id: chat.id,
-              p_user_id: profile.id
-            }
-          );
-
-          if (error) throw error;
-
-          toast(displayName(profile) + " is now a group admin.");
-
-          $("actionDialog").close();
-
-          await refreshData();
-
-          if (activeChat?.id === chat.id) {
-            $("chatSubtitle").textContent =
-              `${(chat.members || []).length} members` +
-              (isGroupAdmin(chat) ? " · Admin" : "");
-          }
-        } catch (error) {
-          toast("Admin nahi bana: " + error.message);
-        } finally {
-          button.disabled = false;
-        }
-      });
-
-      row.append(name, button);
-      results.append(row);
-    });
-  }
-
-  search.addEventListener("input", renderResults);
-
-  await renderResults();
-}
-
-// ---------- EXIT GROUP ----------
-async function exitGroup(chat) {
+// ---------- LEAVE GROUP ----------
+async function leaveGroup(chat) {
   if (!chat || chat.type !== "group") return;
 
-  if (!confirm(
-    "Kya tum is group ko chhodna chahte ho? " +
-    "Tumhare purane messages delete nahi honge."
-  )) {
-    return;
+  if (!confirm("Kya tum is group ko chhodna chahte ho?")) return;
+
+  if (chat.created_by === currentUser.id) {
+    return toast(
+      "Group creator abhi group nahi chhod sakta. Pehle group transfer feature chahiye."
+    );
   }
 
   try {
-    const { error } = await supabaseClient.rpc("leave_group", {
-      p_group_id: chat.id
-    });
+    const members = (chat.members || [])
+      .filter(id => id !== currentUser.id);
 
-    if (error) throw error;
+    const { error: updateError } = await supabaseClient
+      .from("chats")
+      .update({
+        members,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", chat.id);
 
-    if (activeChat?.id === chat.id) {
-      activeChat = null;
-      $("chatScreen").hidden = true;
-      $("homeScreen").hidden = false;
+    if (updateError) throw updateError;
+
+    const { error: memberError } = await supabaseClient
+      .from("group_members")
+      .delete()
+      .eq("group_id", chat.id)
+      .eq("user_id", currentUser.id);
+
+    if (memberError) {
+      console.warn("Membership row removal failed:", memberError.message);
     }
 
+    await supabaseClient
+      .from("group_admins")
+      .delete()
+      .eq("group_id", chat.id)
+      .eq("user_id", currentUser.id);
+
+    $("actionDialog").close();
+    activeChat = null;
+    $("chatScreen").hidden = true;
+
     await refreshData();
-
     showPage("groupsScreen");
-
-    toast("Tum group se exit ho gaye.");
+    toast("You left the group.");
   } catch (error) {
-    toast("Group exit nahi hua: " + error.message);
+    toast("Group nahi chhod paye: " + error.message);
   }
 }
 
@@ -1510,7 +1528,6 @@ function renderRequests() {
   if (!list || !count) return;
 
   list.replaceChildren();
-
   count.textContent = groupRequests.length;
 
   if (!groupRequests.length) {
@@ -1526,27 +1543,18 @@ function renderRequests() {
     title.textContent = request.group_name || "Group invitation";
 
     const accept = document.createElement("button");
-
     accept.type = "button";
     accept.className = "primary-btn";
     accept.textContent = "Accept";
-
-    accept.addEventListener("click", () => {
-      respondToRequest(request, true);
-    });
+    accept.addEventListener("click", () => respondToRequest(request, true));
 
     const reject = document.createElement("button");
-
     reject.type = "button";
     reject.className = "danger-btn";
     reject.textContent = "Reject";
-
-    reject.addEventListener("click", () => {
-      respondToRequest(request, false);
-    });
+    reject.addEventListener("click", () => respondToRequest(request, false));
 
     row.append(title, accept, reject);
-
     list.append(row);
   });
 }
@@ -1598,16 +1606,13 @@ async function respondToRequest(request, accept) {
 
     const { error } = await supabaseClient
       .from("group_requests")
-      .update({
-        status: accept ? "accepted" : "rejected"
-      })
+      .update({ status: accept ? "accepted" : "rejected" })
       .eq("id", request.id)
       .eq("to_user_id", currentUser.id);
 
     if (error) throw error;
 
     await refreshData();
-
     toast(accept ? "Group joined." : "Request rejected.");
   } catch (error) {
     toast(error.message || "Could not update request.");
@@ -1667,6 +1672,18 @@ function subscribeRealtime() {
       }
     })
 
+    .on("postgres_changes", {
+      event: "*",
+      schema: "public",
+      table: "group_admins"
+    }, async () => {
+      try {
+        await refreshData();
+      } catch (error) {
+        console.error(error);
+      }
+    })
+
     .subscribe();
 }
 
@@ -1674,22 +1691,19 @@ function subscribeRealtime() {
 async function startApp() {
   try {
     const { data, error } = await supabaseClient.auth.getSession();
-
     if (error) throw error;
 
     if (data.session?.user) {
       currentUser = data.session.user;
-
       await loadProfile();
-
       await enterApp();
     } else {
       showAuth();
     }
 
     if (!authListener) {
-      const { data: listener } =
-        supabaseClient.auth.onAuthStateChange((event, session) => {
+      const { data: listener } = supabaseClient.auth.onAuthStateChange(
+        (event, session) => {
           if (session?.user && !currentUser) {
             currentUser = session.user;
 
@@ -1698,22 +1712,18 @@ async function startApp() {
                 await loadProfile();
                 await enterApp();
               } catch (err) {
-                setAuthMessage(
-                  err.message || "Could not load profile."
-                );
+                setAuthMessage(err.message || "Could not load profile.");
               }
             }, 0);
           }
-        });
+        }
+      );
 
       authListener = listener.subscription;
     }
   } catch (error) {
     showAuth();
-
-    setAuthMessage(
-      error.message || "Could not connect to Supabase."
-    );
+    setAuthMessage(error.message || "Could not connect to Supabase.");
   }
 }
 
