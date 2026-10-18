@@ -704,8 +704,70 @@ async function openChat(chatId) {
   await loadMessages(chat.id);
 }
 
+
+ // ---------- REALTIME MESSAGE SUBSCRIPTION ----------
+async function subscribeToMessages(chatId) {
+  if (!chatId || !currentUser) return;
+
+  // Same chat ki subscription already active hai.
+  if (subscribedChatId === chatId && messageChannel) return;
+
+  // Purani chat ki subscription band karo.
+  if (messageChannel) {
+    const oldChannel = messageChannel;
+    messageChannel = null;
+    subscribedChatId = null;
+    await supabaseClient.removeChannel(oldChannel);
+  }
+
+  subscribedChatId = chatId;
+
+  const channel = supabaseClient
+    .channel("messages-" + chatId)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: "chat_id=eq." + chatId
+      },
+      payload => {
+        const newMessage = payload.new;
+
+        // Sirf abhi khuli hui chat update karo.
+        if (!activeChat || activeChat.id !== chatId) return;
+
+        // Duplicate message mat dikhana.
+        if (messages.some(m => m.id === newMessage.id)) return;
+
+        messages.push({
+          ...newMessage,
+          body: newMessage.message
+        });
+
+        messages.sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() -
+            new Date(b.created_at).getTime()
+        );
+
+        renderMessages();
+      }
+    )
+    .subscribe(status => {
+      if (status === "CHANNEL_ERROR") {
+        console.error("Realtime subscription failed.");
+      }
+    });
+
+  messageChannel = channel;
+}
+
 // ---------- LOAD / RENDER MESSAGES ----------
 async function loadMessages(chatId) {
+  if (!chatId) return;
+
   const { data, error } = await supabaseClient
     .from("messages")
     .select("id, chat_id, sender_id, message, created_at")
@@ -718,45 +780,15 @@ async function loadMessages(chatId) {
     return;
   }
 
+  // Purane messages load karo.
   messages = (data || [])
     .filter(m => m.chat_id === chatId)
     .map(m => ({ ...m, body: m.message }));
 
   renderMessages();
-}
 
-function renderMessages() {
-  const list = $("messageList");
-  list.replaceChildren();
-
-  if (!activeChat) return;
-
-  messages
-    .filter(m => m.chat_id === activeChat.id)
-    .forEach(message => {
-      const bubble = document.createElement("div");
-      bubble.className =
-        "message" + (message.sender_id === currentUser.id ? " mine" : "");
-
-      const sender = document.createElement("span");
-      sender.className = "sender";
-      sender.textContent = message.sender_id === currentUser.id
-        ? "You"
-        : displayName(profileFor(message.sender_id));
-
-      const content = document.createElement("div");
-      content.textContent = message.body;
-
-      const time = document.createElement("span");
-      time.className = "time";
-      time.textContent = new Date(message.created_at)
-        .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-      bubble.append(sender, content, time);
-      list.append(bubble);
-    });
-
-  list.scrollTop = list.scrollHeight;
+  // Aage aane wale messages automatically receive karo.
+  await subscribeToMessages(chatId);
 }
 
 // ---------- SEND MESSAGE ----------
